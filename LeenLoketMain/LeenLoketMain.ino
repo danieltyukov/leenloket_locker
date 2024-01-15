@@ -623,15 +623,95 @@ void activateQRCodeReader(bool activate) {
   }
 }
 
-void updateStatusFromQRCode(String reservationID) {
-  Reservation reservation = getReservation(reservationID);
-  String itemID = reservation.ItemID;
+Validation updateStatusFromQRCode(String reservationID) {
+  String userName = "NULL";
+  Validation output = {"NULL", "NULL", "NULL"};
+  reservationID.replace("\"", "");
+  Reservation res = getReservation(reservationID);
+  String userID_from_reservation = res.UserID;
+  String itemID_from_reservation = res.ItemID;
+  userID_from_reservation.replace("\"", "");
+  itemID_from_reservation.replace("\"", "");
+  Serial.println(itemID_from_reservation);
 
-  // Update reservation status
-  setReservationStatus(reservationID, "Completed");
+  res.Status.replace("\"", "");
+  res.EndDate.replace("\"", "");
+  if (countColons(res.EndDate) < 2) {
+    res.EndDate += ":00";
+  }
 
-  // Update item status
-  setItemStatus(itemID, "Unavailable");
+  /*
+      Case 1: reservation != "Complete" AND time before EndDate                                   This is an in time pickup    RESULT: Open locker
+      Case 2: reservation != "Complete" AND time after EndDate                                    This is a too late pickup    RESULT: Show message only
+      Case 3: reservation == "Complete" and time before EndDate AND ItemStatus == "Unavailable"   In time return               RESULT: Open Locker
+      Case 3: reservation == "Complete" and time after EndDate AND ItemStatus == "Unavailable"    Late return                  RESULT: Open locker
+  */
+
+
+  Item item = getItem(itemID_from_reservation);
+  Serial.println(item.Status);
+  item.Status.replace("\"", "");
+
+  Serial.println(item.Status);
+
+  Serial.println("A " + String(res.Status.equals("Completed")));
+  Serial.println("B " + String(isNowBeforeTarget(res.EndDate)));
+  Serial.println("C " + String(item.Status.equals("Unavailable")));
+  /*
+     Case 1
+  */
+  if (!res.Status.equals("Completed") && isNowBeforeTarget(res.EndDate)) {
+    output.State = "INTIME_PICKUP";
+    setItemStatus(itemID_from_reservation, "Unavailable");
+    setReservationStatus(reservationID, "Completed");
+    userName = getUser(userID_from_reservation).Name;
+    userName.replace("\"", "");
+  }
+  /*
+     Case 2
+  */
+  else if (!res.Status.equals("Completed") && !isNowBeforeTarget(res.EndDate)) {
+    output.State = "LATE_PICKUP";
+    setReservationStatus(reservationID, "Completed");
+  }
+  /*
+     Case 3
+  */
+  else if (res.Status.equals("Completed") && isNowBeforeTarget(res.EndDate) && item.Status.equals("Unavailable")) {
+    output.State = "INTIME_RETURN";
+    setItemStatus(itemID_from_reservation, "Available");
+    userName = getUser(userID_from_reservation).Name;
+    userName.replace("\"", "");
+  }
+  /*
+     Case 4
+  */
+  else if (res.Status.equals("Completed") && !isNowBeforeTarget(res.EndDate) && item.Status.equals("Unavailable")) {
+    output.State = "LATE_RETURN";
+    setItemStatus(itemID_from_reservation, "Available");
+  }
+  Serial.println(output.State);
+
+  /*if (!res.Status.equals("Complete") && isNowBeforeTarget(res.EndDate)){ //Check if item hasnt already been picked up & if the pickup time is before the reservation end date
+    setReservationStatus(reservationID, "Complete");
+    setItemStatus(itemID_from_reservation, "Taken");
+    userName = getUser(userID_from_reservation).Name;
+    userName.replace("\"","");
+    }
+    else {
+    Item item = getItem(itemID_from_reservation);
+    if (item.Status = "Taken"){ // The user is returning the item after the deadline
+      userName = "LATE";
+      Serial.println("Item returned too late!");
+    }
+    else {
+      userName = "PASSED";
+      Serial.println("Item already taken / Reservation already passed!");
+    }
+    }*/
+  output.Name = userName;
+  output.Date = res.EndDate;
+  return output;
 }
 
 void setup() {
@@ -680,7 +760,124 @@ void loop() {
       Serial.println("'");
 
       // Update status in database
-      updateStatusFromQRCode(scannedCode);
+      Validation check = updateStatusFromQRCode(scannedCode);
+      String Name = check.Name;
+      String Date = check.Date;
+      Date.replace("T", " at ");
+
+      if (check.State.equals("INTIME_PICKUP")) {
+        u8g2.clear();
+        resetLCD(false); // RESET without the "enter your PIN" text
+        ledBlue();
+        Unlock();
+        delay(500);
+        Lock();
+
+        do {
+          u8g2.setFont(u8g2_font_t0_11_tr);
+          u8g2.setCursor(1, 20);
+          u8g2.print("Thank you for");
+          u8g2.setCursor(1, 32);
+          u8g2.print("using LeenLoket");
+          u8g2.setCursor(1, 44);
+          u8g2.setFont(u8g2_font_NokiaSmallBold_tf);
+          u8g2.print(Name + "!");
+          u8g2.sendBuffer();
+        } while ( u8g2.nextPage() );
+        delay(4500);
+        u8g2.clear();
+        resetLCD(false); // RESET without the "enter your PIN" text
+        do {
+          u8g2.setFont(u8g2_font_t0_11_tr);
+          u8g2.setCursor(1, 20);
+          u8g2.print("Please return the");
+          u8g2.setCursor(1, 32);
+          u8g2.print("item before: ");
+          u8g2.setCursor(1, 44);
+          u8g2.setFont(u8g2_font_NokiaSmallBold_tf);
+          u8g2.print(Date);
+          u8g2.sendBuffer();
+        } while ( u8g2.nextPage() );
+        delay(4500);
+        ledGreen();
+        resetLCD();
+      }
+      else if (check.State.equals("LATE_PICKUP")) {
+        u8g2.clear();
+        resetLCD(false); // RESET without the "enter your PIN" text
+
+        do {
+          u8g2.setFont(u8g2_font_t0_11_tr);
+          u8g2.setCursor(1, 20);
+          u8g2.print("The reservation");
+          u8g2.setCursor(1, 32);
+          u8g2.print("date has expired!");
+          u8g2.sendBuffer();
+        } while ( u8g2.nextPage() );
+        errorBlinkRed(5);
+        ledGreen();
+        delay(1000);
+        resetLCD();
+      }
+      else if (check.State.equals("INTIME_RETURN")) {
+        u8g2.clear();
+        resetLCD(false); // RESET without the "enter your PIN" text
+        ledBlue();
+        Unlock();
+        delay(500);
+        Lock();
+
+        do {
+          u8g2.setFont(u8g2_font_t0_11_tr);
+          u8g2.setCursor(1, 20);
+          u8g2.print("Thank you for");
+          u8g2.setCursor(1, 32);
+          u8g2.print("using LeenLoket");
+          u8g2.setCursor(1, 44);
+          u8g2.setFont(u8g2_font_NokiaSmallBold_tf);
+          u8g2.print(Name + "!");
+          u8g2.sendBuffer();
+        } while ( u8g2.nextPage() );
+        delay(4500);
+        u8g2.clear();
+        ledGreen();
+        resetLCD();
+      }
+      else if (check.State.equals("LATE_RETURN")) {
+        u8g2.clear();
+        resetLCD(false); // RESET without the "enter your PIN" text
+        do {
+          u8g2.setFont(u8g2_font_t0_11_tr);
+          u8g2.setCursor(1, 20);
+          u8g2.print("The item has been");
+          u8g2.setCursor(1, 32);
+          u8g2.print("returned late.");
+          u8g2.sendBuffer();
+        } while ( u8g2.nextPage() );
+        ledBlue();
+        Unlock();
+        delay(500);
+        Lock();
+        ledGreen();
+        delay(1000);
+        resetLCD();
+      }
+      else if (check.State.equals("NULL")) {
+        u8g2.clear();
+        resetLCD(false); // RESET without the "enter your PIN" text
+
+        do {
+          u8g2.setFont(u8g2_font_t0_11_tr);
+          u8g2.setCursor(1, 20);
+          u8g2.print("Incorrect code!");
+          u8g2.setCursor(1, 32);
+          u8g2.print("Please try again.");
+          u8g2.sendBuffer();
+        } while ( u8g2.nextPage() );
+        errorBlinkRed(5);
+        ledGreen();
+        resetLCD();
+      }
       activateQRCodeReader(false); // Deactivate QR code reader after scanning
     }
   }
