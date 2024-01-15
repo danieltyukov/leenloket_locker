@@ -9,8 +9,8 @@
 #define LOCK_PIN D12
 #define NUM_LEDS 8
 
-#define WIFI_SSID "WiFi 4-454"
-#define WIFI_PASSWORD "8ksTBeUP"
+#define WIFI_SSID "Mz"
+#define WIFI_PASSWORD "vtgd0060"
 
 // Insert Firebase project API Key
 #define API_KEY "AIzaSyARR033aiPUAJB165QTnjsR45pj1U2m_GU"
@@ -23,7 +23,12 @@
 #include <Keypad.h>
 
 #include <Wire.h>
-#include "tiny_code_reader.h"
+#include <PN532_I2C.h>
+#include <PN532.h>
+#include <NfcAdapter.h>
+
+PN532_I2C pn532_i2c(Wire);
+NfcAdapter nfc = NfcAdapter(pn532_i2c);
 
 U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R0, /* clock=*/ D13, /* data=*/ D11, /* CS=*/ D10, /* reset=*/ D8);
 
@@ -106,10 +111,10 @@ const unsigned char LeenLoketMini [] PROGMEM = {
 
 
 char keys[ROW_NUM][COLUMN_NUM] = {
-  {'1', '4', '7', '*'},
-  {'2', '5', '8', '0'},
-  {'3', '6', '9', '#'},
-  {'A', 'B', 'C', 'D'}
+  {'*', '1', '4', '7'},
+  {'0', '2', '5', '8'},
+  {'#', '3', '6', '9'},
+  {'D', 'A', 'B', 'C'}
 };
 
 byte pin_rows[ROW_NUM] = {D9, D8, D7, D6}; //connect to the row pinouts of the keypad
@@ -143,6 +148,9 @@ struct Validation {
 };
 
 CRGB leds[8];
+
+String RFID1 = "04 37 85 6C DF 61 81";  // RFID tag
+String RFID2 = "04 ED 6A 6C DF 61 80";  // RFID tag
 
 //Define Firebase Data object
 FirebaseData fbdo;
@@ -507,6 +515,23 @@ void errorBlinkRed(int number) {
   delay(1000);
 }
 
+void errorBlinkGreen(int number) {  //Blink green for correct reading RFID1  - Uncomment if not used
+  while (number > 0) {
+    for (int k = 0; k < NUM_LEDS; k++) {
+      leds[k] = 0x4ce91f;
+      FastLED.show();
+    }
+    delay(200);
+    for (int k = 0; k < NUM_LEDS; k++) {
+      leds[k] = CRGB::Black;
+      FastLED.show();
+    }
+    delay(200);
+    number = number - 1;
+  }
+  delay(1000);
+}
+
 /**
    Make the LED Green
 */
@@ -553,7 +578,7 @@ void Unlock() {
 time_t convertDateTimeToEpoch(String dateTimeString) {
   // Parse the date-time string
   int year, month, day, hour, minute, second;
-  sscanf(dateTimeString.c_str(), "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
+  sscanf(dateTimeString.c_str(), "%d-%d-%d %d:%d:%d", &day, &month, &year, &hour, &minute, &second);
 
   // Set the time struct
   struct tm tmTime;
@@ -566,6 +591,7 @@ time_t convertDateTimeToEpoch(String dateTimeString) {
 
   // Convert to epoch time
   time_t epochTime = mktime(&tmTime);
+  Serial.println(epochTime);
   return epochTime;
 }
 
@@ -578,10 +604,34 @@ bool isNowBeforeTarget(String dateTimeString) {
   // Get the current epoch time
   time_t currentTime = time(nullptr) + 3600;
   // Compare the target time with the current time
+  Serial.println(currentTime);
   if (currentTime <= targetTime) {
     return true;
   }
   else {
+    return false;
+  }
+}
+
+bool checkRFID() {
+  if (nfc.tagPresent()) {
+    NfcTag tag = nfc.read();
+    tag.print();
+    Serial.print("RFID Reader has detected UID: ");
+    String UID = tag.getUidString();
+    Serial.println(UID);
+    if (RFID1.equals(UID)) {
+      errorBlinkGreen(3);  // for demonstration blink green if correct RFID1 is scanned
+      ledBlue();
+      return true;
+    } else if (RFID2.equals(UID)) {  // for demonstration blink red if (incorrect) RFID2 is scanned
+      errorBlinkRed(3);
+      ledBlue();
+      return false;
+    } else {
+      return false;
+    }
+  } else {
     return false;
   }
 }
@@ -723,6 +773,7 @@ void setup() {
 
   Wire.begin();
   u8g2.begin();
+  nfc.begin();
   u8g2.clearBuffer();
   // (DECENT u8g2_font_t0_14_tr) (VERY GOOD u8g2_font_t0_11_tr) (FITS u8g2_font_mercutio_sc_nbp_t_all) (VERY GOOD SMALL u8g2_font_smallsimple_tr) ( VERY GOOD BOLD u8g2_font_NokiaSmallBold_tf)
   u8g2.firstPage();
@@ -825,6 +876,7 @@ void loop() {
         ledBlue();
         Unlock();
         delay(500);
+        while (!checkRFID()) {}
         Lock();
 
         do {
@@ -857,6 +909,7 @@ void loop() {
         ledBlue();
         Unlock();
         delay(500);
+        while (!checkRFID()) {}
         Lock();
         ledGreen();
         delay(1000);
@@ -961,6 +1014,7 @@ void loop() {
         ledBlue();
         Unlock();
         delay(500);
+        while (!checkRFID()) {}  // wait until correct rfid is scanned
         Lock();
 
         do {
@@ -994,6 +1048,7 @@ void loop() {
         ledBlue();
         Unlock();
         delay(500);
+        while (!checkRFID()) {}  // wait until correct rfid is scanned
         Lock();
         ledGreen();
         delay(1000);
