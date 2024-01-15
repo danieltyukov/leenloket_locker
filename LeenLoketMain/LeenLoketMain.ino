@@ -309,10 +309,17 @@ Reservation getReservation(String reservationID) {
   return output;
 }
 
+// Function to remove quotation marks from a string
+String sanitizeID(String id) {
+  id.replace("\"", ""); // Replace quotation marks with nothing
+  return id;
+}
+
 /**
    Set the item/reservation status, with input itemID and new status
 */
 void setItemStatus(String itemID, String Status) {
+  itemID = sanitizeID(itemID);
   if (Firebase.RTDB.setString(&fbdo, "/Items/" + String(itemID) + "/Status/", Status)) {
     Serial.println("Set item status of ID: " + String(itemID) + " to: " + Status);
   }
@@ -321,6 +328,7 @@ void setItemStatus(String itemID, String Status) {
   }
 }
 void setReservationStatus(String reservationID, String Status) {
+  reservationID = sanitizeID(reservationID);
   if (Firebase.RTDB.setString(&fbdo, "/Reservations/" + String(reservationID) + "/Status/", Status)) {
     Serial.println("Set reservation status of ID: " + String(reservationID) + " to: " + Status);
   }
@@ -615,6 +623,17 @@ void activateQRCodeReader(bool activate) {
   }
 }
 
+void updateStatusFromQRCode(String reservationID) {
+  Reservation reservation = getReservation(reservationID);
+  String itemID = reservation.ItemID;
+
+  // Update reservation status
+  setReservationStatus(reservationID, "Completed");
+
+  // Update item status
+  setItemStatus(itemID, "Unavailable");
+}
+
 void setup() {
   Serial.begin(9600);
 
@@ -655,9 +674,13 @@ void loop() {
     if (results.content_length == 0) {
       Serial.println("No code found");
     } else {
+      String scannedCode = String((char*)results.content_bytes);
       Serial.print("Found '");
-      Serial.print((char*)results.content_bytes);
+      Serial.print(scannedCode);
       Serial.println("'");
+
+      // Update status in database
+      updateStatusFromQRCode(scannedCode);
       activateQRCodeReader(false); // Deactivate QR code reader after scanning
     }
   }
