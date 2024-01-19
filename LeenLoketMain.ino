@@ -5,8 +5,8 @@
 #include "addons/RTDBHelper.h"
 #include "tiny_code_reader.h"
 
-#define LED_PIN A3
-#define LOCK_PIN D12
+#define LED_PIN 47
+#define LOCK_PIN A3
 #define NUM_LEDS 8
 
 #define WIFI_SSID "Mz"
@@ -821,7 +821,7 @@ void loop() {
         resetLCD(false); // RESET without the "enter your PIN" text
         ledBlue();
         Unlock();
-        delay(500);
+        delay(5000);
         Lock();
 
         do {
