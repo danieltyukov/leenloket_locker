@@ -53,22 +53,37 @@ There is no "I am returning this" button. The locker works out what you are doin
 two fields it reads out of the database, the reservation's status and the item's status:
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Idle
+flowchart TD
+    IDLE["Idle<br/>LEDs green"] --> IN["PIN submitted<br/>or QR scanned"]
+    IN --> LOOK{"Code matches<br/>a reservation?"}
 
-    Idle --> Lookup: PIN submitted, or QR code scanned
-    Lookup --> Idle: no matching code<br/>shows Incorrect code, 5 red blinks
+    LOOK -->|no| BAD["Incorrect code<br/>5 red blinks"]
+    BAD --> IDLE
 
-    Lookup --> InTimePickup: not yet Completed<br/>and still before EndDate
-    Lookup --> LatePickup: not yet Completed<br/>but past EndDate
-    Lookup --> InTimeReturn: Completed, still before EndDate<br/>and item Unavailable
-    Lookup --> LateReturn: Completed, past EndDate<br/>and item Unavailable
+    LOOK -->|yes| DONE{"Reservation<br/>already Completed?"}
 
-    InTimePickup --> Idle: item becomes Unavailable, reservation Completed<br/>unlock, greet by name, show return deadline
-    LatePickup --> Idle: reservation Completed<br/>shows reservation date has expired, stays locked
-    InTimeReturn --> Idle: item becomes Available<br/>unlock, wait for the item's NFC tag, relock
-    LateReturn --> Idle: item becomes Available<br/>shows returned late, unlock, wait for tag, relock
+    DONE -->|"no, this is a pickup"| P{"Past EndDate?"}
+    DONE -->|"yes, this is a return"| R{"Past EndDate?"}
+
+    P -->|no| P1["INTIME_PICKUP"]
+    P -->|yes| P2["LATE_PICKUP"]
+    R -->|no| R1["INTIME_RETURN"]
+    R -->|yes| R2["LATE_RETURN"]
+
+    P1 --> IDLE
+    P2 --> IDLE
+    R1 --> IDLE
+    R2 --> IDLE
 ```
+
+What each outcome does:
+
+| Outcome | Database writes | At the box |
+|---|---|---|
+| `INTIME_PICKUP` | item to `Unavailable`, reservation to `Completed` | Unlocks, greets you by name, shows the return deadline |
+| `LATE_PICKUP` | reservation to `Completed` | Shows that the reservation expired. **Stays locked** |
+| `INTIME_RETURN` | item back to `Available` | Unlocks, waits for the item's NFC tag, relocks |
+| `LATE_RETURN` | item back to `Available` | Shows the item came back late, then unlocks and waits for the tag |
 
 So the same four digits work twice: once to take the drill out, once to put it back. The
 first use flips the reservation to `Completed`, which is exactly what makes the second
