@@ -47,6 +47,16 @@ Then it sits idle, LEDs green, waiting for input:
 `*` clears what you typed, `#` submits it, `A` toggles the QR scanner. Digits echo as
 asterisks. The `[#]` in the corner is the 19x19 version of the same logo.
 
+Here is the cabinet itself, in exactly that idle state:
+
+<p align="center">
+  <img src="docs/locker-built.jpg" alt="The assembled LeenLoket locker, LEDs green and the LCD showing the welcome screen" width="420">
+</p>
+
+The WS2812B strip across the top is green because the box is idle; it goes blue while the
+lock is open and blinks red five times on a rejected code. The QR reader sits in the
+recess above the LCD, the keypad below it, and the solenoid bolt on the door edge.
+
 ## The one rule that makes it work
 
 There is no "I am returning this" button. The locker works out what you are doing from
