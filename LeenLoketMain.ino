@@ -13,7 +13,7 @@
 #define WIFI_PASSWORD "vtgd0060"
 
 // Insert Firebase project API Key
-#define API_KEY "AIzaSyARR033aiPUAJB165QTnjsR45pj1U2m_GU"
+#define API_KEY "REPLACE_WITH_YOUR_API_KEY"
 
 // Insert RTDB URLefine the RTDB URL */
 #define DATABASE_URL "https://tue-leenloket-default-rtdb.europe-west1.firebasedatabase.app"
